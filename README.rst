@@ -1,4 +1,6 @@
-**This project is no longer maintained**
+**This project is no longer maintained him author**
+The repository was created in order to put in it a version of the project that supports python 3
+For google tags: Python 3, python 3.5, python 3.6, python3
 
 This is a layer that functions much like the Django ORM does except it works on top of the Sphinx (http://www.sphinxsearch.com) full-text search engine.
 
