@@ -75,7 +75,7 @@ SPH_ATTR_ORDINAL		= 3
 SPH_ATTR_BOOL			= 4
 SPH_ATTR_FLOAT			= 5
 SPH_ATTR_BIGINT			= 6
-SPH_ATTR_MULTI			= 0X40000000L
+SPH_ATTR_MULTI			= 0X40000000
 
 SPH_ATTR_TYPES = (SPH_ATTR_NONE,
 				  SPH_ATTR_INTEGER,
@@ -196,14 +196,14 @@ class SphinxClient:
 				desc = '%s;%s' % addr
 			sock = socket.socket ( af, socket.SOCK_STREAM )
 			sock.connect ( addr )
-		except socket.error, msg:
+		except socket.error as msg:
 			if sock:
 				sock.close()
 			self._error = 'connection to %s failed (%s)' % ( desc, msg )
 			return
 
 		v = unpack('>L', sock.recv(4))
-		if v<1:
+		if v[0]<1:
 			sock.close()
 			self._error = 'expected searchd protocol version, got %s' % v
 			return
@@ -218,7 +218,7 @@ class SphinxClient:
 		INTERNAL METHOD, DO NOT CALL. Gets and checks response packet from searchd server.
 		"""
 		(status, ver, length) = unpack('>2HL', sock.recv(8))
-		response = ''
+		response = b''
 		left = length
 		while left>0:
 			chunk = sock.recv(left)
@@ -271,8 +271,8 @@ class SphinxClient:
 		"""
 		Set offset and count into result set, and optionally set max-matches and cutoff limits.
 		"""
-		assert ( type(offset) in [int,long] and 0<=offset<16777216 )
-		assert ( type(limit) in [int,long] and 0<limit<16777216 )
+		assert ( type(offset) in [int,int] and 0<=offset<16777216 )
+		assert ( type(limit) in [int,int] and 0<limit<16777216 )
 		assert(maxmatches>=0)
 		self._offset = offset
 		self._limit = limit
@@ -332,7 +332,7 @@ class SphinxClient:
 		Bind per-field weights by name; expects (name,field_weight) dictionary as argument.
 		"""
 		assert(isinstance(weights,dict))
-		for key,val in weights.items():
+		for key,val in list(weights.items()):
 			assert(isinstance(key,str))
 			assert(isinstance(val,int))
 		self._fieldweights = weights
@@ -343,7 +343,7 @@ class SphinxClient:
 		Bind per-index weights by name; expects (name,index_weight) dictionary as argument.
 		"""
 		assert(isinstance(weights,dict))
-		for key,val in weights.items():
+		for key,val in list(weights.items()):
 			assert(isinstance(key,str))
 			assert(isinstance(val,int))
 		self._indexweights = weights
@@ -354,8 +354,8 @@ class SphinxClient:
 		Set IDs range to match.
 		Only match records if document ID is beetwen $min and $max (inclusive).
 		"""
-		assert(isinstance(minid, (int, long)))
-		assert(isinstance(maxid, (int, long)))
+		assert(isinstance(minid, int))
+		assert(isinstance(maxid, int))
 		assert(minid<=maxid)
 		self._min_id = minid
 		self._max_id = maxid
@@ -370,7 +370,7 @@ class SphinxClient:
 		assert iter(values)
 
 		for value in values:
-			assert(isinstance(value, (int, long)))
+			assert(isinstance(value, int))
 
 		self._filters.append ( { 'type':SPH_FILTER_VALUES, 'attr':attribute, 'exclude':exclude, 'values':values } )
 
@@ -493,9 +493,9 @@ class SphinxClient:
 		req.append(pack('>L', len(self._sortby)))
 		req.append(self._sortby)
 
-		if isinstance(query,unicode):
+		if isinstance(query,str):
 			query = query.encode('utf-8')
-		assert(isinstance(query,str))
+		assert(isinstance(query,bytes))
 
 		req.append(pack('>L', len(query)))
 		req.append(query)
@@ -547,26 +547,26 @@ class SphinxClient:
 
 		# per-index weights
 		req.append ( pack ('>L',len(self._indexweights)))
-		for indx,weight in self._indexweights.items():
-			req.append ( pack ('>L',len(indx)) + indx + pack ('>L',weight))
+		for indx,weight in list(self._indexweights.items()):
+			req.append ( pack ('>L',len(indx)) + indx.encode() + pack ('>L',weight))
 
 		# max query time
 		req.append ( pack ('>L', self._maxquerytime) ) 
 
 		# per-field weights
 		req.append ( pack ('>L',len(self._fieldweights) ) )
-		for field,weight in self._fieldweights.items():
-			req.append ( pack ('>L',len(field)) + field + pack ('>L',weight) )
+		for field,weight in list(self._fieldweights.items()):
+			req.append ( pack ('>L',len(field)) + field.encode() + pack ('>L',weight) )
 
 		# comment
-		req.append ( pack('>L',len(comment)) + comment )
+		req.append ( pack('>L',len(comment)) + comment.encode() )
 
 		# attribute overrides
 		req.append ( pack('>L', len(self._overrides)) )
-		for v in self._overrides.values():
+		for v in list(self._overrides.values()):
 			req.extend ( ( pack('>L', len(v['name'])), v['name'] ) )
 			req.append ( pack('>LL', v['type'], len(v['values'])) )
-			for id, value in v['values'].iteritems():
+			for id, value in v['values'].items():
 				req.append ( pack('>Q', id) )
 				if v['type'] == SPH_ATTR_FLOAT:
 					req.append ( pack('>f', value) )
@@ -580,7 +580,8 @@ class SphinxClient:
 		req.append ( self._select )
 
 		# send query, get response
-		req = ''.join(req)
+		req = b''.join(r if isinstance(r, bytes) else r.encode()
+						for r in req)
 
 		self._reqs.append(req)
 		return
@@ -599,7 +600,7 @@ class SphinxClient:
 		if not sock:
 			return None
 
-		req = ''.join(self._reqs)
+		req = b''.join(self._reqs)
 		length = len(req)+4
 		req = pack('>HHLL', SEARCHD_COMMAND_SEARCH, VER_COMMAND_SEARCH, length, len(self._reqs))+req
 		sock.send(req)
@@ -661,7 +662,7 @@ class SphinxClient:
 				p += length
 				type_ = unpack('>L', response[p:p+4])[0]
 				p += 4
-				attrs.append([attr,type_])
+				attrs.append([attr.decode(),type_])
 
 			result['attrs'] = attrs
 
@@ -730,12 +731,14 @@ class SphinxClient:
 		"""
 		if not opts:
 			opts = {}
-		if isinstance(words,unicode):
+		if isinstance(words,str):
 			words = words.encode('utf-8')
+		if isinstance(index,str):
+			index = index.encode('utf-8')
 
 		assert(isinstance(docs, list))
-		assert(isinstance(index, str))
-		assert(isinstance(words, str))
+		assert(isinstance(index, bytes))
+		assert(isinstance(words, bytes))
 		assert(isinstance(opts, dict))
 
 		sock = self._Connect()
@@ -772,13 +775,13 @@ class SphinxClient:
 
 		# options
 		req.append(pack('>L', len(opts['before_match'])))
-		req.append(opts['before_match'])
+		req.append(opts['before_match'].encode('utf-8'))
 
 		req.append(pack('>L', len(opts['after_match'])))
-		req.append(opts['after_match'])
+		req.append(opts['after_match'].encode('utf-8'))
 
 		req.append(pack('>L', len(opts['chunk_separator'])))
-		req.append(opts['chunk_separator'])
+		req.append(opts['chunk_separator'].encode('utf-8'))
 
 		req.append(pack('>L', int(opts['limit'])))
 		req.append(pack('>L', int(opts['around'])))
@@ -786,13 +789,13 @@ class SphinxClient:
 		# documents
 		req.append(pack('>L', len(docs)))
 		for doc in docs:
-			if isinstance(doc,unicode):
+			if isinstance(doc,str):
 				doc = doc.encode('utf-8')
-			assert(isinstance(doc, str))
+			assert(isinstance(doc, bytes))
 			req.append(pack('>L', len(doc)))
 			req.append(doc)
 
-		req = ''.join(req)
+		req = b''.join(req)
 
 		# send query, get response
 		length = len(req)
@@ -840,7 +843,7 @@ class SphinxClient:
 		assert ( isinstance ( values, dict ) )
 		for attr in attrs:
 			assert ( isinstance ( attr, str ) )
-		for docid, entry in values.items():
+		for docid, entry in list(values.items()):
 			assert ( isinstance ( docid, int ) )
 			assert ( isinstance ( entry, list ) )
 			assert ( len(attrs)==len(entry) )
@@ -855,7 +858,7 @@ class SphinxClient:
 			req.append ( pack('>L',len(attr)) + attr )
 
 		req.append ( pack('>L',len(values)) )
-		for docid, entry in values.items():
+		for docid, entry in list(values.items()):
 			req.append ( pack('>Q',docid) )
 			for val in entry:
 				req.append ( pack('>L',val) )

@@ -72,7 +72,7 @@ SPH_ATTR_TIMESTAMP		= 2
 SPH_ATTR_ORDINAL		= 3
 SPH_ATTR_BOOL			= 4
 SPH_ATTR_FLOAT			= 5
-SPH_ATTR_MULTI			= 0X40000000L
+SPH_ATTR_MULTI			= 0X40000000
 
 # known grouping functions
 SPH_GROUPBY_DAY	 		= 0
@@ -148,7 +148,7 @@ class SphinxClient:
 		try:
 			sock = socket.socket ( socket.AF_INET, socket.SOCK_STREAM )
 			sock.connect ( ( self._host, self._port ) )
-		except socket.error, msg:
+		except socket.error as msg:
 			if sock:
 				sock.close()
 			self._error = 'connection to %s:%s failed (%s)' % ( self._host, self._port, msg )
@@ -283,7 +283,7 @@ class SphinxClient:
 		Bind per-field weights by name; expects (name,field_weight) dictionary as argument.
 		"""
 		assert(isinstance(weights,dict))
-		for key,val in weights.items():
+		for key,val in list(weights.items()):
 			assert(isinstance(key,str))
 			assert(isinstance(val,int))
 		self._fieldweights = weights
@@ -294,7 +294,7 @@ class SphinxClient:
 		Bind per-index weights by name; expects (name,index_weight) dictionary as argument.
 		"""
 		assert(isinstance(weights,dict))
-		for key,val in weights.items():
+		for key,val in list(weights.items()):
 			assert(isinstance(key,str))
 			assert(isinstance(val,int))
 		self._indexweights = weights
@@ -322,7 +322,7 @@ class SphinxClient:
 		assert(values)
 
 		for value in values:
-			assert(isinstance(value, (int, long)))
+			assert(isinstance(value, int))
 
 		self._filters.append ( { 'type':SPH_FILTER_VALUES, 'attr':attribute, 'exclude':exclude, 'values':values } )
 
@@ -429,9 +429,9 @@ class SphinxClient:
 		req.append(pack('>L', len(self._sortby)))
 		req.append(self._sortby)
 
-		if isinstance(query,unicode):
+		if isinstance(query,str):
 			query = query.encode('utf-8')
-		assert(isinstance(query,str))
+		assert(isinstance(query,bytes))
 
 		req.append(pack('>L', len(query)))
 		req.append(query)
@@ -483,7 +483,7 @@ class SphinxClient:
 
 		# per-index weights
 		req.append ( pack ('>L',len(self._indexweights)))
-		for indx,weight in self._indexweights.items():
+		for indx,weight in list(self._indexweights.items()):
 			req.append ( pack ('>L',len(indx)) + indx + pack ('>L',weight))
 
 		# max query time
@@ -491,7 +491,7 @@ class SphinxClient:
 
 		# per-field weights
 		req.append ( pack ('>L',len(self._fieldweights) ) )
-		for field,weight in self._fieldweights.items():
+		for field,weight in list(self._fieldweights.items()):
 			req.append ( pack ('>L',len(field)) + field + pack ('>L',weight) )
 
 		# comment
@@ -647,12 +647,12 @@ class SphinxClient:
 		"""
 		if not opts:
 			opts = {}
-		if isinstance(words,unicode):
+		if isinstance(words,str):
 			words = words.encode('utf-8')
 
 		assert(isinstance(docs, list))
-		assert(isinstance(index, str))
-		assert(isinstance(words, str))
+		assert(isinstance(index, bytes))
+		assert(isinstance(words, bytes))
 		assert(isinstance(opts, dict))
 
 		sock = self._Connect()
@@ -697,9 +697,9 @@ class SphinxClient:
 		# documents
 		req.append(pack('>L', len(docs)))
 		for doc in docs:
-			if isinstance(doc,unicode):
+			if isinstance(doc,str):
 				doc = doc.encode('utf-8')
-			assert(isinstance(doc, str))
+			assert(isinstance(doc, bytes))
 			req.append(pack('>L', len(doc)))
 			req.append(doc)
 
@@ -751,7 +751,7 @@ class SphinxClient:
 		assert ( isinstance ( values, dict ) )
 		for attr in attrs:
 			assert ( isinstance ( attr, str ) )
-		for docid, entry in values.items():
+		for docid, entry in list(values.items()):
 			assert ( isinstance ( docid, int ) )
 			assert ( isinstance ( entry, list ) )
 			assert ( len(attrs)==len(entry) )
@@ -766,7 +766,7 @@ class SphinxClient:
 			req.append ( pack('>L',len(attr)) + attr )
 
 		req.append ( pack('>L',len(values)) )
-		for docid, entry in values.items():
+		for docid, entry in list(values.items()):
 			req.append ( pack('>q',docid) )
 			for val in entry:
 				req.append ( pack('>L',val) )
